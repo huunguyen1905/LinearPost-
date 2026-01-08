@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Key, Globe, Fingerprint, ShieldCheck, Link2, Save, CheckCircle2, Edit3, X, RefreshCw } from 'lucide-react';
+import { Plus, Trash2, Key, Globe, Fingerprint, ShieldCheck, Link2, Save, CheckCircle2, Edit3, X, RefreshCw, AlertTriangle } from 'lucide-react';
 import { GlassCard } from './GlassCard';
 import { Destination } from '../types';
 import { sheetService } from '../services/sheetService';
@@ -15,6 +15,8 @@ export const Settings: React.FC<SettingsProps> = ({ destinations, onAddDestinati
   // Connection Config State
   const [scriptUrl, setScriptUrl] = useState('');
   const [isUrlSaved, setIsUrlSaved] = useState(false);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testError, setTestError] = useState('');
 
   // Manage Destination State
   const [isEditing, setIsEditing] = useState(false);
@@ -32,12 +34,27 @@ export const Settings: React.FC<SettingsProps> = ({ destinations, onAddDestinati
     }
   }, []);
 
-  const handleSaveUrl = () => {
-    if (scriptUrl.trim()) {
-      sheetService.setScriptUrl(scriptUrl);
-      setIsUrlSaved(true);
-      alert("Đã lưu cấu hình kết nối!");
+  const handleSaveUrl = async () => {
+    if (!scriptUrl.trim()) return;
+    
+    setTestError('');
+    setIsTesting(true);
+
+    // 1. Test Connection First
+    const success = await sheetService.testConnection(scriptUrl);
+    
+    if (success) {
+        sheetService.setScriptUrl(scriptUrl);
+        setIsUrlSaved(true);
+        // Force reload page to sync everything
+        if(window.confirm("Kết nối thành công! Tải lại trang để đồng bộ dữ liệu?")) {
+            window.location.reload();
+        }
+    } else {
+        setTestError("Kết nối thất bại! Hãy kiểm tra quyền truy cập (Anyone) hoặc URL.");
+        setIsUrlSaved(false);
     }
+    setIsTesting(false);
   };
 
   const handleSaveDestination = async () => {
@@ -55,10 +72,6 @@ export const Settings: React.FC<SettingsProps> = ({ destinations, onAddDestinati
         // Edit Mode: Update via Service
         const success = await sheetService.updateDestination(dest);
         if (success) {
-            // Cập nhật state local (thực tế App sẽ reload lại list này nếu logic cha xử lý tốt, 
-            // nhưng ở đây ta cần trigger reload từ App hoặc update tay. 
-            // Tạm thời gọi onAddDestination để trigger refresh list từ cha nếu cha hỗ trợ replace, 
-            // nhưng an toàn nhất là ta thông báo thành công và để App tự sync)
             alert("Cập nhật thành công! Dữ liệu sẽ được đồng bộ lại.");
             resetForm();
         } else {
@@ -119,22 +132,30 @@ export const Settings: React.FC<SettingsProps> = ({ destinations, onAddDestinati
                             onChange={(e) => {
                                 setScriptUrl(e.target.value);
                                 setIsUrlSaved(false);
+                                setTestError('');
                             }}
                             placeholder="https://script.google.com/macros/s/.../exec"
                             className={`flex-1 bg-[#1c1c1e] text-sm text-white placeholder-gray-600 px-4 py-3 rounded-xl focus:outline-none focus:ring-1 transition-all border ${isUrlSaved ? 'border-green-500/30 focus:ring-green-500/50' : 'border-white/5 focus:ring-blue-500/50'}`}
                         />
                         <button
                             onClick={handleSaveUrl}
+                            disabled={isTesting}
                             className={`px-6 rounded-xl font-bold text-sm transition-all flex items-center gap-2 ${
                                 isUrlSaved 
                                 ? 'bg-green-500/10 text-green-500 border border-green-500/20' 
                                 : 'bg-blue-600 text-white hover:bg-blue-500 shadow-lg'
-                            }`}
+                            } disabled:opacity-50`}
                         >
-                            {isUrlSaved ? <CheckCircle2 size={16} /> : <Save size={16} />}
-                            {isUrlSaved ? 'Đã lưu' : 'Lưu'}
+                            {isTesting ? <RefreshCw size={16} className="animate-spin" /> : (isUrlSaved ? <CheckCircle2 size={16} /> : <Save size={16} />)}
+                            {isTesting ? 'Đang thử...' : (isUrlSaved ? 'Đã lưu' : 'Kiểm tra & Lưu')}
                         </button>
                     </div>
+                    {testError && (
+                        <div className="text-xs text-red-400 flex items-center gap-2 animate-fade-in">
+                            <AlertTriangle size={12} /> {testError}
+                        </div>
+                    )}
+                    <p className="text-[10px] text-gray-500 italic">Lưu ý: Script phải được Deploy quyền "Anyone" (Bất kỳ ai).</p>
                 </div>
              </GlassCard>
         </div>

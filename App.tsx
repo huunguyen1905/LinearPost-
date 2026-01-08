@@ -86,6 +86,9 @@ function App() {
   const [generatedContent, setGeneratedContent] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   
+  // *** NEW: Store Gemini Key from Sheet ***
+  const [geminiKey, setGeminiKey] = useState('');
+
   const [mandatoryContent, setMandatoryContent] = useState(
     `🏨 Prestige Travel - Apec Mandala Cham Bay Mũi Né\n☎️ Hotline/Zalo: 093.888.xxxx (Booking 24/7)\n✨ Giá chỉ từ 400k/người - Bao vé hồ bơi & xe điện`
   );
@@ -115,7 +118,6 @@ function App() {
   
   // Upgrade: Handle silent fetching for auto-updates
   const fetchPosts = useCallback(async (silent: boolean | any = false) => {
-    // Determine if silent based on argument (handle Event objects from click handlers)
     const isSilent = typeof silent === 'boolean' ? silent : false;
 
     if (!isSilent) setIsLoadingPosts(true);
@@ -139,10 +141,19 @@ function App() {
     }
   }, [destinations.length]);
 
+  // *** NEW: Fetch Config (API Keys) ***
+  const fetchConfig = useCallback(async () => {
+      const config = await sheetService.getConfig();
+      if (config && config['GEMINI_API_KEY']) {
+          setGeminiKey(config['GEMINI_API_KEY']);
+      }
+  }, []);
+
   // Upgrade: Auto-sync Logic
   useEffect(() => {
     // 1. Initial Load
     fetchDestinations();
+    fetchConfig(); // Load API Key
     fetchPosts(false); // Show loading on first load
 
     // 2. Polling every 30 seconds
@@ -156,6 +167,7 @@ function App() {
         // Silent refresh when user returns
         fetchPosts(true);
         fetchDestinations();
+        fetchConfig();
     };
 
     window.addEventListener('focus', onFocus);
@@ -164,7 +176,7 @@ function App() {
         clearInterval(intervalId);
         window.removeEventListener('focus', onFocus);
     };
-  }, [fetchDestinations, fetchPosts]);
+  }, [fetchDestinations, fetchPosts, fetchConfig]);
 
   // Refresh when switching to Schedule view to ensure data is fresh
   useEffect(() => {
@@ -246,8 +258,8 @@ function App() {
     
     setSendSuccess(null);
     try {
-      // FIX: Truyền mediaFiles vào hàm generate
-      const content = await generatePostContent(generatedContent, tone, audience, postType, mediaFiles);
+      // FIX: Truyền mediaFiles VÀ geminiKey vào hàm generate
+      const content = await generatePostContent(generatedContent, tone, audience, postType, mediaFiles, geminiKey);
       setGeneratedContent(content);
       if (window.innerWidth < 1024) {
         setTimeout(() => setMobileTab('preview'), 500);
@@ -301,9 +313,6 @@ function App() {
         setLoadingText(`Đang xử lý ${mediaFiles.length} files...`);
         try {
             // *** FIXED: SỬ DỤNG PARALLEL UPLOAD (SONG SONG) ***
-            // Thay vì dùng Batch (1 cục to) dễ lỗi, ta dùng Promise.all để gửi nhiều request nhỏ cùng lúc.
-            // Trình duyệt sẽ tự động tối ưu tốc độ.
-            
             const uploadPromises = mediaFiles.map(async (file, index) => {
                 // 1. Nén ảnh
                 const compressedData = await compressImage(file);
@@ -355,7 +364,7 @@ function App() {
     if (destinations.length > 1 && autoRewrite) {
         setLoadingText('Đang nhân bản & viết lại nội dung...');
         try {
-            const variations = await generateVariations(generatedContent, destinations.length, tone);
+            const variations = await generateVariations(generatedContent, destinations.length, tone, geminiKey);
             if (variations.length < destinations.length) {
                 while (variations.length < destinations.length) {
                     variations.push(variations[variations.length % variations.length]);

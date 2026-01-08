@@ -5,9 +5,6 @@ import { Tone, PostType } from "../types";
 // --- FIX BUILD ERROR: Khai báo process để tránh lỗi TS khi build trên Vercel ---
 declare const process: any;
 
-// Initialization: Use process.env.API_KEY directly as per guidelines
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 // Helper: Convert File to Gemini Part (Base64)
 const fileToGenerativePart = async (file: File) => {
     return new Promise<{ inlineData: { data: string; mimeType: string } }>((resolve, reject) => {
@@ -55,14 +52,24 @@ const getToneInstruction = (tone: Tone) => {
     return toneMap[tone] || tone;
 };
 
+// ** CHANGED: Accept API Key as an argument **
 export const generatePostContent = async (
   topic: string,
   tone: Tone,
   audience: string,
   postType: PostType,
-  mediaFiles: File[] = [] // Nhận thêm file ảnh
+  mediaFiles: File[] = [],
+  apiKey: string
 ): Promise<string> => {
   try {
+    const finalKey = apiKey || process.env.API_KEY;
+    if (!finalKey) {
+        return "Lỗi: Chưa cấu hình Gemini API Key trong Google Sheet (Sheet 'Cấu Hình') hoặc .env.";
+    }
+
+    // Initialize AI instance with dynamic key
+    const ai = new GoogleGenAI({ apiKey: finalKey });
+
     let typeInstruction = '';
     switch (postType) {
         case PostType.TEXT_WITH_BACKGROUND:
@@ -125,8 +132,11 @@ export const generatePostContent = async (
 
     return response.text || "Đang phác thảo...";
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini API Error:", error);
+    if (error.message?.includes('API key')) {
+        return "Lỗi: API Key không hợp lệ. Vui lòng kiểm tra lại trong Google Sheet.";
+    }
     return "Lỗi kết nối AI hoặc ảnh quá lớn.";
   }
 };
@@ -134,9 +144,15 @@ export const generatePostContent = async (
 export const generateVariations = async (
     baseContent: string,
     count: number,
-    tone: Tone
+    tone: Tone,
+    apiKey: string
 ): Promise<string[]> => {
     try {
+        const finalKey = apiKey || process.env.API_KEY;
+        if (!finalKey) return Array(count).fill(baseContent);
+        
+        const ai = new GoogleGenAI({ apiKey: finalKey });
+
         const prompt = `
             CONTEXT: Bạn là trợ lý AI chuyên viết lại nội dung (Spin Content) để tránh spam trên Facebook.
             INPUT CONTENT: "${baseContent}"

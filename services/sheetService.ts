@@ -3,7 +3,7 @@ import { Destination, ScheduledPost, UploadFile, PostStatus, PostType } from "..
 
 // Đổi key sang V4 để đảm bảo reset cache
 const STORAGE_KEY = 'LINEAR_POST_SCRIPT_URL_V4'; 
-const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxvV2UKyCjQR6EvGQH7-TIX3fsj8mxW6K31trv_VrWJK-bxxQ2H86PGCo8vY7nVf8_i/exec';
+const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyLis7DsEVKr48DlpIuVRcxnz0MzHNX3PslLHvrNu2PeeqVExbxuwof_uFze3dltfTv/exec';
 
 interface SheetResponse {
   success: boolean;
@@ -107,6 +107,37 @@ export const sheetService = {
 
   setScriptUrl(url: string) {
     localStorage.setItem(STORAGE_KEY, url.trim());
+  },
+  
+  // *** NEW: Test Connection ***
+  async testConnection(testUrl?: string): Promise<boolean> {
+      const url = testUrl || this.getScriptUrl();
+      if(!url) return false;
+      
+      try {
+          const targetUrl = `${url}?action=testConnection&_t=${Date.now()}`;
+          const response = await fetch(targetUrl, { method: 'GET' });
+          const json: SheetResponse = await response.json();
+          return json.success;
+      } catch (e) {
+          console.error("Connection Test Failed:", e);
+          return false;
+      }
+  },
+
+  // *** NEW: Get System Config (API Keys) ***
+  async getConfig(): Promise<Record<string, string>> {
+      const url = this.getScriptUrl();
+      if (!url) return {};
+      try {
+          const targetUrl = `${url}?action=getConfig&_t=${Date.now()}`;
+          const response = await fetch(targetUrl, { method: 'GET' });
+          const json: SheetResponse = await response.json();
+          return (json.success && json.data) ? json.data : {};
+      } catch (e) {
+          console.error("Config Fetch Error:", e);
+          return {};
+      }
   },
 
   // --- DESTINATIONS ---
@@ -245,7 +276,6 @@ export const sheetService = {
       commonData: Partial<ScheduledPost>
   ): Promise<boolean> {
       
-      // *** FIX: Nếu không có status, mặc định là scheduled (Chờ Đăng) thay vì queue ***
       const statusVN = STATUS_TO_VN[commonData.status || 'scheduled'] || 'Chờ Đăng';
 
       const payload = {
