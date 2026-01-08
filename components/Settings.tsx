@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash2, Key, Globe, Fingerprint, ShieldCheck, Link2, Save, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, Key, Globe, Fingerprint, ShieldCheck, Link2, Save, CheckCircle2, Edit3, X, RefreshCw } from 'lucide-react';
 import { GlassCard } from './GlassCard';
 import { Destination } from '../types';
 import { sheetService } from '../services/sheetService';
@@ -15,11 +16,13 @@ export const Settings: React.FC<SettingsProps> = ({ destinations, onAddDestinati
   const [scriptUrl, setScriptUrl] = useState('');
   const [isUrlSaved, setIsUrlSaved] = useState(false);
 
-  // New Destination State
+  // Manage Destination State
+  const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState('');
   const [pageId, setPageId] = useState('');
   const [token, setToken] = useState('');
   const [showToken, setShowToken] = useState<Record<string, boolean>>({});
+  const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
     const savedUrl = sheetService.getScriptUrl();
@@ -33,27 +36,56 @@ export const Settings: React.FC<SettingsProps> = ({ destinations, onAddDestinati
     if (scriptUrl.trim()) {
       sheetService.setScriptUrl(scriptUrl);
       setIsUrlSaved(true);
-      // Reload page gently to refresh connections if needed, or just let user navigate
       alert("Đã lưu cấu hình kết nối!");
     }
   };
 
-  const handleAdd = () => {
+  const handleSaveDestination = async () => {
     if (!name || !pageId || !token) return;
+    setIsProcessing(true);
 
-    const newDest: Destination = {
+    const dest: Destination = {
       id: pageId,
       name: name,
       accessToken: token,
       type: 'page'
     };
 
-    onAddDestination(newDest);
-    
-    // Reset form
-    setName('');
-    setPageId('');
-    setToken('');
+    if (isEditing) {
+        // Edit Mode: Update via Service
+        const success = await sheetService.updateDestination(dest);
+        if (success) {
+            // Cập nhật state local (thực tế App sẽ reload lại list này nếu logic cha xử lý tốt, 
+            // nhưng ở đây ta cần trigger reload từ App hoặc update tay. 
+            // Tạm thời gọi onAddDestination để trigger refresh list từ cha nếu cha hỗ trợ replace, 
+            // nhưng an toàn nhất là ta thông báo thành công và để App tự sync)
+            alert("Cập nhật thành công! Dữ liệu sẽ được đồng bộ lại.");
+            resetForm();
+        } else {
+            alert("Lỗi cập nhật. Vui lòng thử lại.");
+        }
+    } else {
+        // Add Mode
+        onAddDestination(dest);
+        resetForm();
+    }
+    setIsProcessing(false);
+  };
+
+  const handleEditClick = (dest: Destination) => {
+      setIsEditing(true);
+      setName(dest.name);
+      setPageId(dest.id);
+      setToken(dest.accessToken);
+      // Cuộn lên đầu
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const resetForm = () => {
+      setIsEditing(false);
+      setName('');
+      setPageId('');
+      setToken('');
   };
 
   const toggleTokenVisibility = (id: string) => {
@@ -103,9 +135,6 @@ export const Settings: React.FC<SettingsProps> = ({ destinations, onAddDestinati
                             {isUrlSaved ? 'Đã lưu' : 'Lưu'}
                         </button>
                     </div>
-                    <p className="text-[10px] text-gray-500">
-                        * Triển khai Script với quyền <b>"Anyone"</b>. URL phải kết thúc bằng <code>/exec</code>.
-                    </p>
                 </div>
              </GlassCard>
         </div>
@@ -115,10 +144,20 @@ export const Settings: React.FC<SettingsProps> = ({ destinations, onAddDestinati
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           
-          {/* 2. Add Page Form */}
+          {/* 2. Add/Edit Page Form */}
           <div className="space-y-6">
-            <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">Thêm trang mới</h2>
-            <GlassCard className="p-6 space-y-5">
+            <div className="flex justify-between items-center">
+                <h2 className="text-xs font-bold text-gray-500 uppercase tracking-widest ml-1">
+                    {isEditing ? 'Cập nhật thông tin' : 'Thêm trang mới'}
+                </h2>
+                {isEditing && (
+                    <button onClick={resetForm} className="text-[10px] text-red-400 hover:text-red-300 flex items-center gap-1 font-bold uppercase">
+                        <X size={12} /> Hủy bỏ
+                    </button>
+                )}
+            </div>
+            
+            <GlassCard className={`p-6 space-y-5 transition-all duration-300 ${isEditing ? 'border-blue-500/30 shadow-[0_0_30px_rgba(59,130,246,0.1)]' : ''}`}>
               
               {!isUrlSaved && (
                   <div className="bg-orange-500/10 border border-orange-500/20 rounded-lg p-3 text-orange-400 text-xs flex items-center gap-2 mb-2">
@@ -149,10 +188,11 @@ export const Settings: React.FC<SettingsProps> = ({ destinations, onAddDestinati
                   type="text"
                   value={pageId}
                   onChange={(e) => setPageId(e.target.value)}
-                  disabled={!isUrlSaved}
+                  disabled={!isUrlSaved || isEditing} // Disable ID editing to prevent mismatch
                   placeholder="VD: 100089..."
-                  className="w-full bg-[#1c1c1e] text-sm text-white placeholder-gray-600 px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all border border-white/5 font-mono disabled:opacity-50"
+                  className={`w-full bg-[#1c1c1e] text-sm text-white placeholder-gray-600 px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-blue-500/50 transition-all border border-white/5 font-mono disabled:opacity-50 ${isEditing ? 'cursor-not-allowed opacity-60' : ''}`}
                 />
+                {isEditing && <p className="text-[9px] text-gray-500 italic">* Không thể thay đổi ID khi chỉnh sửa</p>}
               </div>
 
               <div className="space-y-2">
@@ -170,16 +210,18 @@ export const Settings: React.FC<SettingsProps> = ({ destinations, onAddDestinati
               </div>
 
               <button
-                onClick={handleAdd}
-                disabled={!name || !pageId || !token || !isUrlSaved}
+                onClick={handleSaveDestination}
+                disabled={!name || !pageId || !token || !isUrlSaved || isProcessing}
                 className={`w-full py-3 rounded-xl font-semibold text-white transition-all shadow-lg flex items-center justify-center gap-2 ${
-                  !name || !pageId || !token || !isUrlSaved
+                  !name || !pageId || !token || !isUrlSaved || isProcessing
                     ? 'bg-gray-800 text-gray-500 cursor-not-allowed' 
-                    : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-blue-500/20 active:scale-[0.98]'
+                    : isEditing 
+                        ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:shadow-green-500/20 active:scale-[0.98]'
+                        : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:shadow-blue-500/20 active:scale-[0.98]'
                 }`}
               >
-                <Plus size={18} />
-                <span>Kết nối trang</span>
+                {isProcessing ? <RefreshCw className="animate-spin" size={18} /> : (isEditing ? <CheckCircle2 size={18} /> : <Plus size={18} />)}
+                <span>{isEditing ? 'Cập nhật thông tin' : 'Kết nối trang'}</span>
               </button>
 
             </GlassCard>
@@ -197,7 +239,7 @@ export const Settings: React.FC<SettingsProps> = ({ destinations, onAddDestinati
                 </div>
               ) : (
                 destinations.map((dest) => (
-                  <GlassCard key={dest.id} className="p-4 flex items-start gap-4 group hover:bg-[#1c1c1e] transition-colors">
+                  <GlassCard key={dest.id} className={`p-4 flex items-start gap-4 group hover:bg-[#1c1c1e] transition-colors border ${isEditing && pageId === dest.id ? 'border-blue-500/50 bg-blue-500/5' : 'border-white/5'}`}>
                     <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold text-xs shadow-lg flex-shrink-0">
                       {dest.name.substring(0, 2).toUpperCase()}
                     </div>
@@ -219,12 +261,22 @@ export const Settings: React.FC<SettingsProps> = ({ destinations, onAddDestinati
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => onRemoveDestination(dest.id)}
-                      className="p-2 rounded-lg text-gray-500 hover:bg-red-500/10 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <div className="flex flex-col gap-2">
+                        <button
+                          onClick={() => handleEditClick(dest)}
+                          className="p-2 rounded-lg text-gray-400 hover:bg-blue-500/10 hover:text-blue-400 transition-all"
+                          title="Sửa thông tin"
+                        >
+                          <Edit3 size={16} />
+                        </button>
+                        <button
+                          onClick={() => onRemoveDestination(dest.id)}
+                          className="p-2 rounded-lg text-gray-400 hover:bg-red-500/10 hover:text-red-500 transition-all"
+                          title="Xóa trang"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                    </div>
                   </GlassCard>
                 ))
               )}

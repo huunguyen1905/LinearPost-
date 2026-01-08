@@ -1,6 +1,6 @@
 
 /**
- * LINEAR POST AI - BACKEND SCRIPT V7 (Batch Upload Speed Up)
+ * LINEAR POST AI - BACKEND SCRIPT V8 (Add Edit Destination)
  * ---------------------------------------------
  * 
  * HƯỚNG DẪN CÀI ĐẶT:
@@ -42,9 +42,10 @@ function handleRequest(e) {
       case 'updatePost': return responseJSON(updatePost(ss, payload));
       case 'deletePost': return responseJSON(deletePost(ss, payload));
       case 'uploadMedia': return responseJSON(uploadMedia(payload));
-      case 'uploadBatchMedia': return responseJSON(uploadBatchMedia(payload)); // NEW: Batch Upload
+      case 'uploadBatchMedia': return responseJSON(uploadBatchMedia(payload));
       case 'getDestinations': return responseJSON(getDestinations(ss));
       case 'addDestination': return responseJSON(addDestination(ss, payload));
+      case 'updateDestination': return responseJSON(updateDestination(ss, payload)); // NEW: Update Page Info
       case 'removeDestination': return responseJSON(removeDestination(ss, payload));
       case 'setupSheet': return responseJSON(setupSheet());
       default: return responseJSON({ success: false, message: "Invalid Action" });
@@ -269,7 +270,7 @@ function deletePost(ss, payload) {
 
 // --- MEDIA & PAGE UTILS ---
 
-// Upload 1 file (Giữ lại để tương thích cũ)
+// Upload 1 file
 function uploadMedia(payload) {
   try {
     if (!MEDIA_FOLDER_ID || MEDIA_FOLDER_ID.includes("HAY_THAY_ID")) return { success: false, message: "No Folder ID" };
@@ -278,7 +279,6 @@ function uploadMedia(payload) {
     var file = folder.createFile(blob);
     file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
     
-    // Link view trực tiếp
     var fileUrl = "https://drive.google.com/uc?export=view&id=" + file.getId();
     var type = payload.mimeType.includes('video') ? 'video' : 'image';
     return { success: true, url: fileUrl, type: type };
@@ -287,7 +287,7 @@ function uploadMedia(payload) {
   }
 }
 
-// *** NEW: Upload Nhiều file 1 lúc (Nhanh gấp N lần) ***
+// Upload Batch
 function uploadBatchMedia(payload) {
   try {
     if (!MEDIA_FOLDER_ID || MEDIA_FOLDER_ID.includes("HAY_THAY_ID")) {
@@ -296,7 +296,6 @@ function uploadBatchMedia(payload) {
     var folder = DriveApp.getFolderById(MEDIA_FOLDER_ID);
     var results = [];
     
-    // payload.files là mảng chứa các file { data, mimeType, name }
     if (payload.files && Array.isArray(payload.files)) {
       for (var i = 0; i < payload.files.length; i++) {
          var item = payload.files[i];
@@ -310,7 +309,6 @@ function uploadBatchMedia(payload) {
          results.push({ url: fileUrl, type: type });
       }
     }
-    
     return { success: true, files: results };
   } catch (e) {
     return { success: false, message: "Batch Upload Error: " + e.toString() };
@@ -330,6 +328,27 @@ function addDestination(ss, payload) {
   var sheet = ss.getSheetByName(SHEET_PAGES);
   sheet.appendRow([payload.name, payload.id, payload.accessToken]);
   return { success: true };
+}
+
+// *** NEW: Hàm cập nhật thông tin trang ***
+function updateDestination(ss, payload) {
+  var sheet = ss.getSheetByName(SHEET_PAGES);
+  var id = String(payload.id); // ID trang làm khóa
+  var lastRow = sheet.getLastRow();
+  
+  // Duyệt qua cột ID (Cột B - index 1) để tìm dòng
+  var data = sheet.getRange(2, 1, lastRow - 1, 3).getValues();
+  
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][1]) === id) { // Cột 2 là ID
+       var row = i + 2;
+       // Cập nhật Tên (Cột 1) và Token (Cột 3)
+       sheet.getRange(row, 1).setValue(payload.name);
+       sheet.getRange(row, 3).setValue(payload.accessToken);
+       return { success: true };
+    }
+  }
+  return { success: false, message: "Destination ID Not Found" };
 }
 
 function removeDestination(ss, payload) {

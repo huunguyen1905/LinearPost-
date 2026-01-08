@@ -223,11 +223,18 @@ function App() {
     };
   }, [mediaFiles]); // Chạy lại khi danh sách file thay đổi
   
+  // *** FIXED: LOGIC STATUS MẶC ĐỊNH ***
   useEffect(() => {
     if (scheduleMode === 'later') {
+        // Khi chọn "Lên lịch" -> Bắt buộc là "Chờ Đăng"
         setPostStatus('scheduled');
-    } else if (postStatus === 'scheduled') {
-        setPostStatus('queue');
+    } else {
+        // Khi chọn "Đăng ngay"
+        // Nếu trước đó đang là 'scheduled' thì đổi về 'queue'
+        // Nếu đang là các trạng thái khác (draft, queue) thì giữ nguyên
+        if (postStatus === 'scheduled') {
+            setPostStatus('queue');
+        }
     }
   }, [scheduleMode]);
 

@@ -121,6 +121,11 @@ export const sheetService = {
     return this.sendRequest('addDestination', dest);
   },
 
+  // *** NEW: Update Destination ***
+  async updateDestination(dest: Destination): Promise<boolean> {
+    return this.sendRequest('updateDestination', dest);
+  },
+
   async removeDestination(id: string): Promise<boolean> {
     return this.sendRequest('removeDestination', { id });
   },

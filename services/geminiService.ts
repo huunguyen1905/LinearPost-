@@ -1,7 +1,11 @@
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { Tone, PostType } from "../types";
 
+// --- FIX BUILD ERROR: Khai báo process để tránh lỗi TS khi build trên Vercel ---
+declare const process: any;
+
+// Initialization: Use process.env.API_KEY directly as per guidelines
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // Helper: Convert File to Gemini Part (Base64)
@@ -110,7 +114,7 @@ export const generatePostContent = async (
 
     // Gọi API với cấu trúc Multimodal
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash', 
+      model: 'gemini-3-flash-preview', 
       contents: {
           parts: [
               ...imageParts, // Đưa ảnh vào trước
@@ -147,9 +151,15 @@ export const generateVariations = async (
         `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3-flash-preview',
             contents: prompt,
-            config: { responseMimeType: "application/json" }
+            config: { 
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING }
+                }
+            }
         });
 
         const json = JSON.parse(response.text || '[]');
