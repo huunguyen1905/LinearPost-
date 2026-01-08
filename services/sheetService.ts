@@ -52,25 +52,20 @@ const normalizeDate = (dateStr: string): string => {
         if (!dateStr) return '';
         const cleanStr = String(dateStr).replace(/'/g, '').trim(); 
         
-        if (cleanStr.includes('-') && cleanStr.length > 10) return cleanStr;
+        // Handle new ISO-like format: yyyy-MM-dd HH:mm:ss -> yyyy-MM-ddTHH:mm:ss
+        // This makes it compatible with <input type="datetime-local"> and Date constructor
+        if (cleanStr.includes('-')) {
+            return cleanStr.replace(' ', 'T');
+        }
         
+        // Fallback for legacy format: HH:mm:ss dd/MM/yyyy
         const parts = cleanStr.split(' ');
         
-        // Handle HH:mm:ss dd/MM/yyyy (New format)
         // parts[0] = Time, parts[1] = Date
         if (parts[1] && parts[1].includes('/')) {
             const [day, month, year] = parts[1].split('/');
             const time = parts[0];
             return `${year}-${month}-${day}T${time}`;
-        }
-
-        // Handle dd/MM/yyyy HH:mm:ss (Legacy format)
-        const dPart = parts[0];
-        const tPart = parts[1] || '00:00:00';
-
-        if (dPart.includes('/')) {
-            const [day, month, year] = dPart.split('/');
-            return `${year}-${month}-${day}T${tPart}`;
         }
         
         return cleanStr;

@@ -61,7 +61,7 @@ const compressImage = async (file: File, quality = 0.7, maxWidth = 1600): Promis
   });
 };
 
-// *** UPDATE: Format HH:mm:ss dd/MM/yyyy ***
+// *** UPDATE: Format chuẩn yyyy-MM-dd HH:mm:ss cho Backend/n8n ***
 const formatDateForSheet = (dateObj: Date): string => {
   const pad = (n: number) => n.toString().padStart(2, '0');
   const d = pad(dateObj.getDate());
@@ -70,8 +70,9 @@ const formatDateForSheet = (dateObj: Date): string => {
   const h = pad(dateObj.getHours());
   const min = pad(dateObj.getMinutes());
   const s = pad(dateObj.getSeconds());
-  // Format yêu cầu: 14:19:52 26/12/2025
-  return `${h}:${min}:${s} ${d}/${m}/${y}`;
+  
+  // Format chuẩn ISO-like (không có T) để dễ đọc và dễ parse: 2025-12-26 14:19:52
+  return `${y}-${m}-${d} ${h}:${min}:${s}`;
 };
 
 function App() {
