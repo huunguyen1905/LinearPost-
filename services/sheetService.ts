@@ -33,22 +33,18 @@ const STATUS_TO_VN: Record<string, string> = {
     'failed': 'Lỗi'
 };
 
-const STATUS_FROM_VN: Record<string, PostStatus> = {
-    'Nháp': 'draft',
-    'Chờ Đăng': 'scheduled',
-    'Hàng chờ': 'queue',
-    'Thành Công': 'published',
-    'Lỗi': 'failed',
-    'draft': 'draft',
-    'scheduled': 'scheduled',
-    'queue': 'queue',
-    'published': 'published',
-    'failed': 'failed'
-};
-
 const normalizeStatus = (raw: any): PostStatus => {
-    const val = String(raw).trim();
-    return STATUS_FROM_VN[val] || (['draft', 'scheduled', 'queue', 'published', 'failed'].includes(val) ? val as PostStatus : 'draft');
+    if (!raw) return 'draft';
+    const val = String(raw).trim().toLowerCase();
+    
+    // Update: Nhận diện cả không dấu
+    if (val === 'lỗi' || val === 'loi' || val === 'failed' || val === 'error') return 'failed';
+    if (val === 'thành công' || val === 'thanh cong' || val === 'published' || val === 'success') return 'published';
+    if (val === 'chờ đăng' || val === 'cho dang' || val === 'scheduled') return 'scheduled';
+    if (val === 'hàng chờ' || val === 'hang cho' || val === 'queue') return 'queue';
+    if (val === 'nháp' || val === 'nhap' || val === 'draft') return 'draft';
+
+    return 'draft'; // Default fallback
 };
 
 const normalizeDate = (dateStr: string): string => {
@@ -59,6 +55,16 @@ const normalizeDate = (dateStr: string): string => {
         if (cleanStr.includes('-') && cleanStr.length > 10) return cleanStr;
         
         const parts = cleanStr.split(' ');
+        
+        // Handle HH:mm:ss dd/MM/yyyy (New format)
+        // parts[0] = Time, parts[1] = Date
+        if (parts[1] && parts[1].includes('/')) {
+            const [day, month, year] = parts[1].split('/');
+            const time = parts[0];
+            return `${year}-${month}-${day}T${time}`;
+        }
+
+        // Handle dd/MM/yyyy HH:mm:ss (Legacy format)
         const dPart = parts[0];
         const tPart = parts[1] || '00:00:00';
 
@@ -74,19 +80,20 @@ const normalizeDate = (dateStr: string): string => {
     }
 };
 
-// *** FIX: Hàm chuyển đổi link Drive sang dạng hiển thị được ***
+// *** FIX: Hàm chuyển đổi link Drive sang dạng Thumbnail hiển thị được ***
 const convertDriveLink = (link: string): string => {
     if (!link) return '';
     const cleanLink = link.trim();
     
-    // Tìm ID file trong link Drive
-    // Hỗ trợ các dạng: /file/d/ID, id=ID
+    // Tìm ID file trong link Drive (hỗ trợ nhiều format)
+    // /file/d/ID, id=ID, open?id=ID
     const idMatch = cleanLink.match(/[-\w]{25,}/);
     
     if (idMatch && (cleanLink.includes('drive.google.com') || cleanLink.includes('docs.google.com'))) {
-        // Sử dụng link lh3.googleusercontent.com để bypass CORS và load nhanh hơn
-        // d/ID là format 'download/display' không cần redirect
-        return `https://lh3.googleusercontent.com/d/${idMatch[0]}`;
+        // Sử dụng Thumbnail API:
+        // sz=w800: Resize chiều rộng 800px (đủ nét cho list view và mobile)
+        // API này hoạt động cho cả VIDEO (lấy thumbnail video) và ẢNH.
+        return `https://drive.google.com/thumbnail?id=${idMatch[0]}&sz=w800`;
     }
     
     return cleanLink;
@@ -141,11 +148,15 @@ export const sheetService = {
       
       if (json.success && Array.isArray(json.data)) {
         return json.data.map((r: any): ScheduledPost => {
-            // FIX: Xử lý link ảnh bằng convertDriveLink
+            // FIX: Xử lý link ảnh/video bằng convertDriveLink mới
+            // Ưu tiên lấy Video link trước, nếu không có lấy Image link
             const videoLinks = r[8] ? String(r[8]).split('\n').filter(Boolean) : [];
-            const imageLinks = r[9] ? String(r[9]).split('\n').filter(Boolean).map(convertDriveLink) : [];
+            const imageLinks = r[9] ? String(r[9]).split('\n').filter(Boolean) : [];
             
-            const allMedia = [...videoLinks, ...imageLinks];
+            // Lấy link gốc để lưu, nhưng preview thì convert
+            const rawMedia = [...videoLinks, ...imageLinks];
+            const previewUrl = rawMedia.length > 0 ? convertDriveLink(rawMedia[0]) : null;
+            
             const content = r[5] ? String(r[5]) : "";
             const topic = content.length > 60 ? content.substring(0, 60) + "..." : (content || "Bài viết không tiêu đề");
             
@@ -164,7 +175,7 @@ export const sheetService = {
                 content: content,
                 mandatoryContent: r[6] || '',
                 seedingComment: r[7] || '',
-                mediaPreview: allMedia.length > 0 ? allMedia[0] : null,
+                mediaPreview: previewUrl, // Link đã convert sang thumbnail
                 mediaType: (videoLinks.length > 0 ? 'video' : 'image') as 'video' | 'image',
                 topic: topic, 
                 createdAt: new Date().toISOString()
@@ -234,7 +245,8 @@ export const sheetService = {
       commonData: Partial<ScheduledPost>
   ): Promise<boolean> {
       
-      const statusVN = STATUS_TO_VN[commonData.status || 'queue'] || 'Hàng chờ';
+      // *** FIX: Nếu không có status, mặc định là scheduled (Chờ Đăng) thay vì queue ***
+      const statusVN = STATUS_TO_VN[commonData.status || 'scheduled'] || 'Chờ Đăng';
 
       const payload = {
           videoUrls: videoUrls.join('\n'),

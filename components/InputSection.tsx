@@ -1,6 +1,6 @@
 
 import React, { useRef, useState, useEffect } from 'react';
-import { Sparkles, Briefcase, Smile, Zap, Coffee, Lightbulb, Image as ImageIcon, UploadCloud, X, Film, Layers, Type, Settings2, Eraser, Circle, Clock, CheckCircle2, ChevronUp, ChevronDown, Plus, Globe, Check } from 'lucide-react';
+import { Sparkles, Briefcase, Smile, Zap, Coffee, Lightbulb, Image as ImageIcon, UploadCloud, X, Film, Layers, Type, Settings2, Eraser, Circle, Clock, CheckCircle2, ChevronUp, ChevronDown, Plus, Globe, Check, AlertCircle } from 'lucide-react';
 import { Tone, Destination, PostType, PostStatus } from '../types';
 import { GlassCard } from './GlassCard';
 
@@ -99,11 +99,13 @@ export const InputSection: React.FC<InputSectionProps> = ({
     { value: PostType.TEXT_WITH_BACKGROUND, label: 'Text_Kèm_Background', icon: Type },
   ];
   
+  // *** UPDATE: Thêm lại trạng thái 'queue' (Hàng chờ) ***
   const statusOptions: { value: PostStatus, label: string, icon: any, color: string }[] = [
-    { value: 'draft', label: 'Nháp', icon: Circle, color: 'text-red-400' },
-    { value: 'scheduled', label: 'Chờ Đăng', icon: Clock, color: 'text-yellow-400' },
+    { value: 'draft', label: 'Nháp', icon: Circle, color: 'text-gray-400' },
     { value: 'queue', label: 'Hàng chờ', icon: Layers, color: 'text-purple-400' },
+    { value: 'scheduled', label: 'Chờ Đăng', icon: Clock, color: 'text-yellow-400' },
     { value: 'published', label: 'Thành Công', icon: CheckCircle2, color: 'text-green-400' },
+    { value: 'failed', label: 'Lỗi', icon: AlertCircle, color: 'text-red-500' },
   ];
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {

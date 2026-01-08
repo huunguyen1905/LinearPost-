@@ -61,6 +61,7 @@ const compressImage = async (file: File, quality = 0.7, maxWidth = 1600): Promis
   });
 };
 
+// *** UPDATE: Format HH:mm:ss dd/MM/yyyy ***
 const formatDateForSheet = (dateObj: Date): string => {
   const pad = (n: number) => n.toString().padStart(2, '0');
   const d = pad(dateObj.getDate());
@@ -69,7 +70,8 @@ const formatDateForSheet = (dateObj: Date): string => {
   const h = pad(dateObj.getHours());
   const min = pad(dateObj.getMinutes());
   const s = pad(dateObj.getSeconds());
-  return `${d}/${m}/${y} ${h}:${min}:${s}`;
+  // Format yêu cầu: 14:19:52 26/12/2025
+  return `${h}:${min}:${s} ${d}/${m}/${y}`;
 };
 
 function App() {
@@ -98,7 +100,8 @@ function App() {
   const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now');
   const [scheduledTime, setScheduledTime] = useState<string>('');
   
-  const [postStatus, setPostStatus] = useState<PostStatus>('queue');
+  // *** FIXED: Mặc định là 'scheduled' (Chờ Đăng) theo yêu cầu ***
+  const [postStatus, setPostStatus] = useState<PostStatus>('scheduled');
   const [autoRewrite, setAutoRewrite] = useState(true); // New State for Auto Rewrite
 
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>([]);
@@ -223,19 +226,15 @@ function App() {
     };
   }, [mediaFiles]); // Chạy lại khi danh sách file thay đổi
   
-  // *** FIXED: LOGIC STATUS MẶC ĐỊNH ***
+  // *** UPDATE: Logic scheduleMode ***
   useEffect(() => {
     if (scheduleMode === 'later') {
         // Khi chọn "Lên lịch" -> Bắt buộc là "Chờ Đăng"
         setPostStatus('scheduled');
-    } else {
-        // Khi chọn "Đăng ngay"
-        // Nếu trước đó đang là 'scheduled' thì đổi về 'queue'
-        // Nếu đang là các trạng thái khác (draft, queue) thì giữ nguyên
-        if (postStatus === 'scheduled') {
-            setPostStatus('queue');
-        }
-    }
+    } 
+    // Nếu chọn 'now', ta giữ nguyên trạng thái hiện tại (mặc định là scheduled)
+    // hoặc người dùng có thể tự đổi sang 'published' nếu muốn.
+    // Xóa logic ép về 'queue' để tôn trọng yêu cầu mặc định là 'scheduled'.
   }, [scheduleMode]);
 
   const handleGenerate = async () => {
