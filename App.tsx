@@ -23,8 +23,6 @@ const fileToBase64 = (file: File): Promise<string> => {
 };
 
 // *** UPGRADE: Tối ưu nén ảnh ***
-// Giảm maxWidth xuống 1600 (đủ nét cho FB Mobile/Desktop)
-// Giảm quality xuống 0.7 (giảm ~40% dung lượng mà mắt thường khó phân biệt)
 const compressImage = async (file: File, quality = 0.7, maxWidth = 1600): Promise<string> => {
   if (file.type.startsWith('video')) return fileToBase64(file);
   
@@ -53,7 +51,6 @@ const compressImage = async (file: File, quality = 0.7, maxWidth = 1600): Promis
         resolve(dataUrl.split(',')[1]);
       };
       img.onerror = () => {
-        // Fallback nếu lỗi load ảnh (ví dụ file lỗi), trả về base64 gốc
         resolve(fileToBase64(file));
       }
     };
@@ -61,7 +58,7 @@ const compressImage = async (file: File, quality = 0.7, maxWidth = 1600): Promis
   });
 };
 
-// *** UPDATE: Format chuẩn yyyy-MM-dd HH:mm:ss cho Backend/n8n ***
+// *** UPDATE: Format chuẩn dd/MM/yyyy HH:mm:ss theo yêu cầu n8n ***
 const formatDateForSheet = (dateObj: Date): string => {
   const pad = (n: number) => n.toString().padStart(2, '0');
   const d = pad(dateObj.getDate());
@@ -71,8 +68,8 @@ const formatDateForSheet = (dateObj: Date): string => {
   const min = pad(dateObj.getMinutes());
   const s = pad(dateObj.getSeconds());
   
-  // Format chuẩn ISO-like (không có T) để dễ đọc và dễ parse: 2025-12-26 14:19:52
-  return `${y}-${m}-${d} ${h}:${min}:${s}`;
+  // Format khớp với cấu hình n8n: 20/12/2025 11:51:29
+  return `${d}/${m}/${y} ${h}:${min}:${s}`;
 };
 
 function App() {
@@ -82,12 +79,11 @@ function App() {
 
   // Input State
   const [tone, setTone] = useState<Tone>(Tone.PROFESSIONAL);
-  const [postType, setPostType] = useState<PostType>(PostType.TEXT_ONLY); // Mặc định là Text
+  const [postType, setPostType] = useState<PostType>(PostType.TEXT_ONLY);
   const [audience, setAudience] = useState('');
   const [generatedContent, setGeneratedContent] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   
-  // *** NEW: Store Gemini Key from Sheet ***
   const [geminiKey, setGeminiKey] = useState('');
 
   const [mandatoryContent, setMandatoryContent] = useState(
@@ -104,9 +100,8 @@ function App() {
   const [scheduleMode, setScheduleMode] = useState<'now' | 'later'>('now');
   const [scheduledTime, setScheduledTime] = useState<string>('');
   
-  // *** FIXED: Mặc định là 'scheduled' (Chờ Đăng) theo yêu cầu ***
   const [postStatus, setPostStatus] = useState<PostStatus>('scheduled');
-  const [autoRewrite, setAutoRewrite] = useState(true); // New State for Auto Rewrite
+  const [autoRewrite, setAutoRewrite] = useState(true);
 
   const [scheduledPosts, setScheduledPosts] = useState<ScheduledPost[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(false);
@@ -117,7 +112,6 @@ function App() {
 
   // --- DATA FETCHING ---
   
-  // Upgrade: Handle silent fetching for auto-updates
   const fetchPosts = useCallback(async (silent: boolean | any = false) => {
     const isSilent = typeof silent === 'boolean' ? silent : false;
 
@@ -142,7 +136,6 @@ function App() {
     }
   }, [destinations.length]);
 
-  // *** NEW: Fetch Config (API Keys) ***
   const fetchConfig = useCallback(async () => {
       const config = await sheetService.getConfig();
       if (config && config['GEMINI_API_KEY']) {
@@ -150,22 +143,16 @@ function App() {
       }
   }, []);
 
-  // Upgrade: Auto-sync Logic
   useEffect(() => {
-    // 1. Initial Load
     fetchDestinations();
-    fetchConfig(); // Load API Key
-    fetchPosts(false); // Show loading on first load
+    fetchConfig();
+    fetchPosts(false);
 
-    // 2. Polling every 30 seconds
     const intervalId = setInterval(() => {
-        // Silent refresh in background
         fetchPosts(true); 
     }, 30000);
 
-    // 3. Sync on Tab Focus (User comes back to app)
     const onFocus = () => {
-        // Silent refresh when user returns
         fetchPosts(true);
         fetchDestinations();
         fetchConfig();
@@ -179,10 +166,9 @@ function App() {
     };
   }, [fetchDestinations, fetchPosts, fetchConfig]);
 
-  // Refresh when switching to Schedule view to ensure data is fresh
   useEffect(() => {
       if (currentView === 'schedule') {
-          fetchPosts(false); // Explicit load when entering schedule view
+          fetchPosts(false);
       }
       if (currentView === 'create' && availableDestinations.length === 0) {
           fetchDestinations();
@@ -199,25 +185,18 @@ function App() {
   }, []);
 
   useEffect(() => {
-    // Clean up previews
     return () => { mediaPreviews.forEach(url => URL.revokeObjectURL(url)); };
   }, []); 
   
-  // *** UPGRADE: AUTO-DETECT POST TYPE BASED ON MEDIA ***
   useEffect(() => {
-    // 1. Update Previews
     const newPreviews = mediaFiles.map(file => URL.createObjectURL(file));
     setMediaPreviews(newPreviews);
 
-    // 2. Auto-switch Post Type
     if (mediaFiles.length > 0) {
         const firstFile = mediaFiles[0];
-        
-        // Nếu là Video
         if (firstFile.type.startsWith('video')) {
             setPostType(PostType.VIDEO);
         } else {
-            // Nếu là Ảnh
             if (mediaFiles.length > 1) {
                 setPostType(PostType.MULTIPLE_IMAGES);
             } else {
@@ -225,33 +204,23 @@ function App() {
             }
         }
     } else {
-        // Nếu không có file (User xóa hết ảnh)
-        // Chỉ chuyển về TEXT_ONLY nếu đang ở các chế độ media (Single, Multiple, Video)
-        // Nếu đang ở TEXT_WITH_BACKGROUND thì giữ nguyên
         if (postType !== PostType.TEXT_WITH_BACKGROUND) {
             setPostType(PostType.TEXT_ONLY);
         }
     }
 
-    // Cleanup previews on re-render
     return () => {
         newPreviews.forEach(url => URL.revokeObjectURL(url));
     };
-  }, [mediaFiles]); // Chạy lại khi danh sách file thay đổi
+  }, [mediaFiles]);
   
-  // *** UPDATE: Logic scheduleMode ***
   useEffect(() => {
     if (scheduleMode === 'later') {
-        // Khi chọn "Lên lịch" -> Bắt buộc là "Chờ Đăng"
         setPostStatus('scheduled');
     } 
-    // Nếu chọn 'now', ta giữ nguyên trạng thái hiện tại (mặc định là scheduled)
-    // hoặc người dùng có thể tự đổi sang 'published' nếu muốn.
-    // Xóa logic ép về 'queue' để tôn trọng yêu cầu mặc định là 'scheduled'.
   }, [scheduleMode]);
 
   const handleGenerate = async () => {
-    // Cho phép generate ngay cả khi không có text, miễn là có ảnh
     if (!generatedContent && mediaFiles.length === 0) return;
     
     setIsGenerating(true);
@@ -259,7 +228,6 @@ function App() {
     
     setSendSuccess(null);
     try {
-      // FIX: Truyền mediaFiles VÀ geminiKey vào hàm generate
       const content = await generatePostContent(generatedContent, tone, audience, postType, mediaFiles, geminiKey);
       setGeneratedContent(content);
       if (window.innerWidth < 1024) {
@@ -313,30 +281,24 @@ function App() {
     if (mediaFiles.length > 0) {
         setLoadingText(`Đang xử lý ${mediaFiles.length} files...`);
         try {
-            // *** FIXED: SỬ DỤNG PARALLEL UPLOAD (SONG SONG) ***
             const uploadPromises = mediaFiles.map(async (file, index) => {
-                // 1. Nén ảnh
                 const compressedData = await compressImage(file);
                 
-                // 2. Upload file đơn lẻ
                 const payload: UploadFile = {
                     data: compressedData,
                     mimeType: file.type,
                     name: file.name
                 };
 
-                // Trả về promise upload
                 return sheetService.uploadMedia(payload).then(res => {
-                    return { index, res }; // Giữ index để biết file nào
+                    return { index, res }; 
                 });
             });
 
             setLoadingText(`Đang tải lên song song ${mediaFiles.length} file...`);
             
-            // Chạy tất cả song song
             const results = await Promise.all(uploadPromises);
 
-            // Kiểm tra kết quả
             let successCount = 0;
             results.forEach(({ res }) => {
                 if (res && res.url) {
@@ -361,7 +323,6 @@ function App() {
 
     let contents = [generatedContent];
     
-    // LOGIC: Nếu chọn nhiều trang VÀ Bật Auto-Rewrite -> Tạo nhiều nội dung
     if (destinations.length > 1 && autoRewrite) {
         setLoadingText('Đang nhân bản & viết lại nội dung...');
         try {
@@ -376,7 +337,6 @@ function App() {
             contents = Array(destinations.length).fill(generatedContent);
         }
     } else {
-        // Nếu tắt Auto-Rewrite hoặc chỉ chọn 1 trang -> Dùng nội dung gốc cho tất cả
         contents = Array(destinations.length).fill(generatedContent);
     }
 

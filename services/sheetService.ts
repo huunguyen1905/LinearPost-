@@ -52,20 +52,29 @@ const normalizeDate = (dateStr: string): string => {
         if (!dateStr) return '';
         const cleanStr = String(dateStr).replace(/'/g, '').trim(); 
         
-        // Handle new ISO-like format: yyyy-MM-dd HH:mm:ss -> yyyy-MM-ddTHH:mm:ss
-        // This makes it compatible with <input type="datetime-local"> and Date constructor
-        if (cleanStr.includes('-')) {
-            return cleanStr.replace(' ', 'T');
-        }
-        
-        // Fallback for legacy format: HH:mm:ss dd/MM/yyyy
+        // Handle: 20/12/2025 11:51:29 (dd/MM/yyyy HH:mm:ss)
         const parts = cleanStr.split(' ');
         
-        // parts[0] = Time, parts[1] = Date
-        if (parts[1] && parts[1].includes('/')) {
-            const [day, month, year] = parts[1].split('/');
-            const time = parts[0];
-            return `${year}-${month}-${day}T${time}`;
+        if (parts.length === 2) {
+            // Check for date part containing slash (/)
+            if (parts[0].includes('/')) {
+                const [day, month, year] = parts[0].split('/');
+                const time = parts[1];
+                // Convert to ISO: yyyy-MM-ddTHH:mm:ss for frontend
+                return `${year}-${month}-${day}T${time}`;
+            }
+            
+            // Fallback for Time-First legacy format (Just in case): HH:mm:ss dd/MM/yyyy
+            if (parts[1].includes('/')) {
+                const [day, month, year] = parts[1].split('/');
+                const time = parts[0];
+                return `${year}-${month}-${day}T${time}`;
+            }
+        }
+        
+        // Handle ISO-like format if already present
+        if (cleanStr.includes('-')) {
+            return cleanStr.replace(' ', 'T');
         }
         
         return cleanStr;
