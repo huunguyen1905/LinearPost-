@@ -52,6 +52,14 @@ const MediaThumbnail = ({ src, type, className }: { src: string | null; type: 'v
     );
 };
 
+// HELPER: Format date for Sheet (dd/MM/yyyy HH:mm:ss)
+const formatISODateToSheet = (isoDate: string): string => {
+    if (!isoDate) return '';
+    const date = new Date(isoDate);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${pad(date.getDate())}/${pad(date.getMonth()+1)}/${date.getFullYear()} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+};
+
 // Component Modal Chỉnh Sửa
 const EditPostModal = ({ 
     post, 
@@ -74,11 +82,14 @@ const EditPostModal = ({
         // Topic được tạo tự động từ 50 ký tự đầu của content
         const newTopic = content.length > 60 ? content.substring(0, 60) + "..." : content;
         
+        // Ensure format is correct for Sheet
+        const formattedTime = formatISODateToSheet(time);
+
         await onSave(post.id, {
             content: content,
             mandatoryContent: mandatory,
             seedingComment: seeding,
-            scheduledTime: time,
+            scheduledTime: formattedTime, // Send format: 20/12/2025 11:51:29
             status: status,
             topic: newTopic
         });

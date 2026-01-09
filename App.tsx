@@ -355,6 +355,7 @@ function App() {
             id: (Date.now() + index).toString(),
             content: contents[index % contents.length],
             destinations: [dest.name],
+            destinationIds: [dest.id], // NEW: Send Page ID
             scheduledTime: formatDateForSheet(postTime),
             mandatoryContent: mandatoryContent,
             seedingComment: seedingComment

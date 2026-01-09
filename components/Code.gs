@@ -1,6 +1,6 @@
 
 /**
- * LINEAR POST AI - BACKEND SCRIPT V10 (Dynamic Config)
+ * LINEAR POST AI - BACKEND SCRIPT V12 (Smart Migration: Add Page ID Column)
  * ---------------------------------------------
  */
 
@@ -9,7 +9,7 @@ var MEDIA_FOLDER_ID = "HAY_THAY_ID_THU_MUC_DRIVE_VAO_DAY";
 
 var SHEET_POSTS = "Bang_1";
 var SHEET_PAGES = "Page FB";
-var SHEET_CONFIG = "Cấu Hình"; // Sheet mới chứa API Key
+var SHEET_CONFIG = "Cấu Hình"; 
 
 // --- KHỞI TẠO WEB APP ---
 function doGet(e) { return handleRequest(e); }
@@ -41,7 +41,7 @@ function handleRequest(e) {
       case 'addDestination': return responseJSON(addDestination(ss, payload));
       case 'updateDestination': return responseJSON(updateDestination(ss, payload));
       case 'removeDestination': return responseJSON(removeDestination(ss, payload));
-      case 'getConfig': return responseJSON(getConfig(ss)); // Action mới
+      case 'getConfig': return responseJSON(getConfig(ss)); 
       case 'setupSheet': return responseJSON(setupSheet());
       default: return responseJSON({ success: false, message: "Invalid Action or Missing Parameters" });
     }
@@ -54,25 +54,40 @@ function responseJSON(data) {
   return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
 }
 
-// --- HÀM SETUP SHEET ---
+// --- HÀM SETUP SHEET & MIGRATION ---
 function setupSheet() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   
   // 1. SETUP SHEET: Bang_1 (Bài viết)
   var sheet1 = ss.getSheetByName(SHEET_POSTS);
+  var headers1 = [
+    "STT", "Trang FB", "ID Trang", "Trạng thái", "Loại bài viết", "Thời gian đăng", 
+    "Nội dung chính", "Nội dung bắt buộc", "Bình luận", "Link Video", "Link ảnh", "Link FB"
+  ];
+
   if (!sheet1) { 
+    // Tạo mới nếu chưa có
     sheet1 = ss.insertSheet(SHEET_POSTS);
-    var headers1 = [
-      "STT", "Trang FB", "Trạng thái", "Loại bài viết", "Thời gian đăng", 
-      "Nội dung chính", "Nội dung bắt buộc", "Bình luận", "Link Video", "Link ảnh", "Link FB"
-    ];
     var headerRange = sheet1.getRange(1, 1, 1, headers1.length);
     headerRange.setValues([headers1]);
     headerRange.setFontWeight("bold").setBackground("#fce5cd").setHorizontalAlignment("center");
     sheet1.setFrozenRows(1);
-    sheet1.getRange(2, 5, 999, 4).setNumberFormat("@"); 
-    sheet1.getRange("F:H").setWrap(true);
-    sheet1.setColumnWidth(6, 350);
+    sheet1.getRange(2, 6, 999, 4).setNumberFormat("@"); // Format Text
+    sheet1.getRange("G:I").setWrap(true);
+    sheet1.setColumnWidth(7, 350); 
+    sheet1.setColumnWidth(3, 150); // Độ rộng cột ID Trang
+  } else {
+    // *** SMART MIGRATION: Kiểm tra và chèn cột ID Trang nếu thiếu ***
+    var headerCheck = sheet1.getRange(1, 3).getValue(); // Check cột C
+    if (headerCheck !== "ID Trang") {
+       // Nếu cột 3 không phải ID Trang, ta chèn cột mới vào sau cột B (Cột 2)
+       sheet1.insertColumnAfter(2);
+       sheet1.getRange(1, 3).setValue("ID Trang").setFontWeight("bold").setBackground("#fce5cd");
+       sheet1.setColumnWidth(3, 150);
+       
+       // Cập nhật lại toàn bộ header để đảm bảo đúng thứ tự
+       sheet1.getRange(1, 1, 1, headers1.length).setValues([headers1]);
+    }
   }
   
   // 2. SETUP SHEET: Page FB
@@ -85,23 +100,20 @@ function setupSheet() {
     sheet2.getRange(2, 2, 999, 1).setNumberFormat("@");
   }
 
-  // 3. SETUP SHEET: Cấu Hình (MỚI)
+  // 3. SETUP SHEET: Cấu Hình
   var sheet3 = ss.getSheetByName(SHEET_CONFIG);
   if (!sheet3) {
     sheet3 = ss.insertSheet(SHEET_CONFIG);
     var headers3 = ["KEY (Không sửa)", "VALUE (Giá trị)", "Mô tả"];
     sheet3.getRange(1, 1, 1, 3).setValues([headers3]).setFontWeight("bold").setBackground("#cfe2f3");
     sheet3.setFrozenRows(1);
-    
-    // Thêm dòng mặc định cho API Key
     sheet3.appendRow(["GEMINI_API_KEY", "", "Dán Gemini API Key của bạn vào cột B"]);
-    
     sheet3.setColumnWidth(1, 150);
     sheet3.setColumnWidth(2, 350);
     sheet3.setColumnWidth(3, 200);
   }
 
-  return { success: true, message: "Đã thiết lập cấu trúc bảng tính (bao gồm sheet Cấu Hình)!" };
+  return { success: true, message: "Đã cập nhật cấu trúc bảng tính (Thêm cột ID Trang)!" };
 }
 
 // --- LOGIC CONFIG ---
@@ -112,7 +124,7 @@ function getConfig(ss) {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return { success: true, data: {} };
   
-  var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues(); // Chỉ lấy cột A và B
+  var data = sheet.getRange(2, 1, lastRow - 1, 2).getValues(); 
   var config = {};
   
   for (var i = 0; i < data.length; i++) {
@@ -126,14 +138,15 @@ function getConfig(ss) {
   return { success: true, data: config };
 }
 
-// --- LOGIC BÀI VIẾT (GIỮ NGUYÊN) ---
+// --- LOGIC BÀI VIẾT (UPDATED INDICES: ID Trang = Cột 3) ---
 
 function getPosts(ss) {
   var sheet = ss.getSheetByName(SHEET_POSTS);
   if (!sheet) return { success: true, data: [] };
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return { success: true, data: [] };
-  var data = sheet.getRange(2, 1, lastRow - 1, 11).getDisplayValues(); 
+  // Lấy 12 cột (A -> L)
+  var data = sheet.getRange(2, 1, lastRow - 1, 12).getDisplayValues(); 
   return { success: true, data: data };
 }
 
@@ -149,10 +162,22 @@ function createBatchPosts(ss, payload) {
   if (payload.items && payload.items.length > 0) {
     payload.items.forEach(function(item) {
       var destStr = Array.isArray(item.destinations) ? item.destinations.join(", ") : item.destinations;
+      // Nhận ID Trang từ frontend (nếu có), nếu không để trống
+      var destIdsStr = Array.isArray(item.destinationIds) ? item.destinationIds.join(", ") : (item.destinationIds || "");
+      
       var row = [
-        "'" + item.id, destStr, common.status || 'queue', common.postType || 'Đăng Một Ảnh',
-        item.scheduledTime, item.content || '', item.mandatoryContent || '', item.seedingComment || '',
-        videoUrlStr, imageUrlStr, ''
+        "'" + item.id,               // 1. STT (A)
+        destStr,                     // 2. Trang FB (B)
+        "'" + destIdsStr,            // 3. ID Trang (C) -> NEW
+        common.status || 'queue',    // 4. Trạng thái (D)
+        common.postType || 'Đăng Một Ảnh', // 5. Loại bài viết (E)
+        item.scheduledTime,          // 6. Thời gian (F)
+        item.content || '',          // 7. Nội dung (G)
+        item.mandatoryContent || '', // 8. Nội dung bắt buộc (H)
+        item.seedingComment || '',   // 9. Bình luận (I)
+        videoUrlStr,                 // 10. Link Video (J)
+        imageUrlStr,                 // 11. Link ảnh (K)
+        ''                           // 12. Link FB (L)
       ];
       newRows.push(row);
     });
@@ -163,10 +188,12 @@ function createBatchPosts(ss, payload) {
   try {
     lock.waitLock(30000); 
     var lastRow = sheet.getLastRow();
-    sheet.getRange(lastRow + 1, 1, newRows.length, 11).setValues(newRows);
-    var range = sheet.getRange(lastRow + 1, 1, newRows.length, 11);
+    // Ghi 12 cột
+    sheet.getRange(lastRow + 1, 1, newRows.length, 12).setValues(newRows);
+    var range = sheet.getRange(lastRow + 1, 1, newRows.length, 12);
     range.setVerticalAlignment("top");
-    sheet.getRange(lastRow + 1, 5, newRows.length, 4).setNumberFormat("@").setWrap(true);
+    // Format text cho các cột nội dung (Cột 7,8,9 -> G, H, I)
+    sheet.getRange(lastRow + 1, 7, newRows.length, 3).setNumberFormat("@").setWrap(true);
   } catch (e) { return { success: false, message: "Lỗi ghi: " + e.toString() }; } 
   finally { lock.releaseLock(); }
   return { success: true };
@@ -180,15 +207,30 @@ function updatePost(ss, payload) {
     var id = String(payload.id);
     var lastRow = sheet.getLastRow();
     if (lastRow < 2) return { success: false };
+    
+    // Cột 1 là ID (STT)
     var idData = sheet.getRange(2, 1, lastRow - 1, 1).getValues(); 
+    
     for (var i = 0; i < idData.length; i++) {
       if (String(idData[i][0]) === id) {
         var r = i + 2;
-        if (payload.status) sheet.getRange(r, 3).setValue(payload.status);
-        if (payload.scheduledTime) sheet.getRange(r, 5).setNumberFormat("@").setValue(payload.scheduledTime);
-        if (payload.content !== undefined) sheet.getRange(r, 6).setNumberFormat("@").setValue(payload.content);
-        if (payload.mandatoryContent !== undefined) sheet.getRange(r, 7).setNumberFormat("@").setValue(payload.mandatoryContent);
-        if (payload.seedingComment !== undefined) sheet.getRange(r, 8).setNumberFormat("@").setValue(payload.seedingComment);
+        // Cập nhật theo index mới (dịch chuyển +1 do thêm cột ID Trang vào vị trí 3)
+        
+        // Trạng thái: Cột 4 (D)
+        if (payload.status) sheet.getRange(r, 4).setValue(payload.status);
+        
+        // Thời gian: Cột 6 (F)
+        if (payload.scheduledTime) sheet.getRange(r, 6).setNumberFormat("@").setValue(payload.scheduledTime);
+        
+        // Nội dung: Cột 7 (G)
+        if (payload.content !== undefined) sheet.getRange(r, 7).setNumberFormat("@").setValue(payload.content);
+        
+        // Nội dung bắt buộc: Cột 8 (H)
+        if (payload.mandatoryContent !== undefined) sheet.getRange(r, 8).setNumberFormat("@").setValue(payload.mandatoryContent);
+        
+        // Bình luận: Cột 9 (I)
+        if (payload.seedingComment !== undefined) sheet.getRange(r, 9).setNumberFormat("@").setValue(payload.seedingComment);
+        
         return { success: true };
       }
     }
@@ -212,7 +254,7 @@ function deletePost(ss, payload) {
   return { success: false };
 }
 
-// --- MEDIA & PAGE UTILS ---
+// --- MEDIA & PAGE UTILS --- (Giữ nguyên)
 function uploadMedia(payload) {
   try {
     if (!MEDIA_FOLDER_ID || MEDIA_FOLDER_ID.includes("HAY_THAY_ID")) return { success: false, message: "No Folder ID" };

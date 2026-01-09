@@ -3,7 +3,7 @@ import { Destination, ScheduledPost, UploadFile, PostStatus, PostType } from "..
 
 // Đổi key sang V4 để đảm bảo reset cache
 const STORAGE_KEY = 'LINEAR_POST_SCRIPT_URL_V4'; 
-const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyLis7DsEVKr48DlpIuVRcxnz0MzHNX3PslLHvrNu2PeeqVExbxuwof_uFze3dltfTv/exec';
+const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxWVONQh_tYl1Qm-3XLfmbZjLfiK_vQmZJaldYuKCLYa7_UiaaM3wQ48ayOme_ODMzk/exec';
 
 interface SheetResponse {
   success: boolean;
@@ -17,7 +17,8 @@ interface SheetResponse {
 export interface BatchPostItem {
     id: string;
     content: string;
-    destinations: string[]; 
+    destinations: string[];
+    destinationIds: string[]; // NEW: Truyền ID Trang xuống Backend
     scheduledTime: string; 
     mandatoryContent: string;
     seedingComment: string;
@@ -183,34 +184,45 @@ export const sheetService = {
       
       if (json.success && Array.isArray(json.data)) {
         return json.data.map((r: any): ScheduledPost => {
-            // FIX: Xử lý link ảnh/video bằng convertDriveLink mới
-            // Ưu tiên lấy Video link trước, nếu không có lấy Image link
-            const videoLinks = r[8] ? String(r[8]).split('\n').filter(Boolean) : [];
-            const imageLinks = r[9] ? String(r[9]).split('\n').filter(Boolean) : [];
+            // Updated Index Mapping for 12 Columns
+            // r[0]: STT
+            // r[1]: Trang FB
+            // r[2]: ID Trang (NEW - Ignore in UI for now)
+            // r[3]: Trạng thái
+            // r[4]: Loại bài viết
+            // r[5]: Thời gian đăng
+            // r[6]: Nội dung
+            // r[7]: Nội dung bắt buộc
+            // r[8]: Bình luận
+            // r[9]: Video
+            // r[10]: Ảnh
+            // r[11]: Link FB
             
-            // Lấy link gốc để lưu, nhưng preview thì convert
+            const videoLinks = r[9] ? String(r[9]).split('\n').filter(Boolean) : [];
+            const imageLinks = r[10] ? String(r[10]).split('\n').filter(Boolean) : [];
+            
             const rawMedia = [...videoLinks, ...imageLinks];
             const previewUrl = rawMedia.length > 0 ? convertDriveLink(rawMedia[0]) : null;
             
-            const content = r[5] ? String(r[5]) : "";
+            const content = r[6] ? String(r[6]) : "";
             const topic = content.length > 60 ? content.substring(0, 60) + "..." : (content || "Bài viết không tiêu đề");
             
-            const rawStatus = r[2];
+            const rawStatus = r[3];
             const statusEnum = normalizeStatus(rawStatus);
 
-            const rawTime = r[4] ? String(r[4]) : '';
+            const rawTime = r[5] ? String(r[5]) : '';
             const isoTime = normalizeDate(rawTime);
 
             return {
                 id: String(r[0]).replace(/'/g, ''), 
                 destinations: r[1] ? String(r[1]).split(', ') : [],
                 status: statusEnum, 
-                postType: (r[3] || 'Đăng Một Ảnh') as PostType,
+                postType: (r[4] || 'Đăng Một Ảnh') as PostType,
                 scheduledTime: isoTime, 
                 content: content,
-                mandatoryContent: r[6] || '',
-                seedingComment: r[7] || '',
-                mediaPreview: previewUrl, // Link đã convert sang thumbnail
+                mandatoryContent: r[7] || '',
+                seedingComment: r[8] || '',
+                mediaPreview: previewUrl, 
                 mediaType: (videoLinks.length > 0 ? 'video' : 'image') as 'video' | 'image',
                 topic: topic, 
                 createdAt: new Date().toISOString()
